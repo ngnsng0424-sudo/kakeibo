@@ -1,0 +1,115 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="家計簿"><meta name="theme-color" content="#101214"><meta name="color-scheme" content="dark">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon.png"><title>家計簿</title>
+<style>
+:root{--bg:#101214;--sf:#1b1e22;--ln:#2c3036;--tx:#ebe8e2;--mu:#8b9096;--ex:#e8a35c;--in:#6fb7a8}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 -apple-system,"Hiragino Sans",sans-serif;overscroll-behavior:none}
+#app{height:100%;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+main{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column}
+nav{display:flex;border-top:1px solid var(--ln);background:var(--sf);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;padding:14px 0;background:none;border:0;color:var(--mu);font-size:13px}
+nav button.on{color:var(--tx);box-shadow:inset 0 2px var(--ex)}
+.seg{display:flex;background:var(--sf);border-radius:10px;padding:3px;margin-bottom:8px}
+.seg button{flex:1;padding:10px;border:0;border-radius:8px;background:none;color:var(--mu);font-size:16px}
+.seg button.on{background:var(--ln);color:var(--tx)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.chip{padding:9px 12px;border-radius:18px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:14px}
+.chip.on{border-color:var(--ex);color:var(--ex)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:block;font-size:12px;color:var(--mu);margin-bottom:8px}
+input,select{width:100%;margin-top:3px;padding:11px;border-radius:10px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:16px}
+#fm{margin:0 0 8px}
+.amt{display:flex;gap:8px}.amt input{margin:0;font-size:22px}
+.go{padding:0 22px;border-radius:10px;border:0;background:var(--ex);color:#1a1205;font-size:17px;font-weight:600}
+.del{margin-top:8px;padding:11px;border-radius:10px;border:1px solid var(--ln);background:none;color:#e07a6e;font-size:15px}
+.r{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--ln)}
+.s{color:var(--mu);font-size:12px}.e{color:var(--ex)}.i{color:var(--in)}
+.bar{height:6px;border-radius:3px;background:var(--ex);margin-top:4px}
+h3{margin:18px 0 6px;font-size:14px;color:var(--mu);font-weight:600}
+.sm{display:inline-block;padding:8px 13px;border-radius:10px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:14px;margin:0 6px 6px 0}
+.pn{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pn button{padding:8px 16px;border-radius:10px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:16px}
+.big{font-size:26px;font-variant-numeric:tabular-nums}
+#t{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 10px);transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:9px 16px;border-radius:18px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
+</style></head><body><div id="app"><main></main>
+<nav><button data-t="in" onclick="go('in')">入力</button><button data-t="li" onclick="go('li')">一覧</button><button data-t="su" onclick="go('su')">集計</button><button data-t="up" onclick="go('up')">予定</button><button data-t="se" onclick="go('se')">設定</button></nav></div><div id="t"></div>
+<script>
+const $=s=>document.querySelector(s),K='kakeibo1',p2=n=>String(n).padStart(2,'0'),uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const D={tx:[],ce:['食費','日用品','交通費','住居','水道光熱費','通信費','娯楽','衣服・美容','医療','立替','その他'],ci:['給与','精算','貯金崩し','その他'],
+pay:[{n:'現金',c:0,d:0,m:0},{n:'クレジットカード',c:15,d:10,m:1},{n:'電子マネー/QR決済',c:0,d:0,m:0},{n:'交通マネー',c:0,d:0,m:0}],fx:[],sd:1,ov:{}};
+const clone=o=>JSON.parse(JSON.stringify(o));
+function load(){try{return Object.assign(clone(D),JSON.parse(localStorage.getItem(K)||'{}'))}catch(e){return clone(D)}}
+let S=load(),v='in',E=null,F,P;
+const save=()=>localStorage.setItem(K,JSON.stringify(S));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yen=n=>'¥'+n.toLocaleString('ja-JP');
+const ds=(y,m,d)=>{const t=new Date(y,m,d);return t.getFullYear()+'-'+p2(t.getMonth()+1)+'-'+p2(t.getDate())};
+const today=()=>{const t=new Date();return ds(t.getFullYear(),t.getMonth(),t.getDate())};
+const parse=s=>s.split('-').map(Number),dim=(y,m)=>new Date(y,m,0).getDate();
+const mk=(y,m)=>{const t=new Date(y,m-1,1);return t.getFullYear()+'-'+p2(t.getMonth()+1)};
+const nk=(k,n)=>{const[y,m]=k.split('-').map(Number);return mk(y,m+n)};
+const ps=k=>{const[y,m]=k.split('-').map(Number);return ds(y,m-1,S.ov[k]||S.sd)};
+function per(date){const[y,m]=parse(date),k=mk(y,m);for(const c of[nk(k,1),k,nk(k,-1)])if(date>=ps(c))return c;return nk(k,-2)}
+function pend(k){const[y,m,d]=parse(ps(nk(k,1)));return ds(y,m-1,d-1)}
+const plab=k=>Number(k.split('-')[1])+'月分';
+const prange=k=>ps(k).slice(5).replace('-','/')+' 〜 '+pend(k).slice(5).replace('-','/');
+function due(date,pn){const p=S.pay.find(x=>x.n===pn);if(!p||!p.c)return date;let[y,m,d]=parse(date);if(d>p.c)m++;m+=p.m;return ds(y,m-1,Math.min(p.d,dim(y,m)))}
+const nf=()=>({type:'e',cat:'',pay:S.pay.some(p=>p.n==='現金')?'現金':(S.pay[0]||{}).n,date:today(),amt:'',memo:'',due:'',man:0});
+function toast(m){const t=$('#t');t.textContent=m;t.style.opacity=1;setTimeout(()=>t.style.opacity=0,1600)}
+function runFx(){const t=today(),[ty,tm]=parse(t);let ch=0;S.fx.forEach(f=>{f.done=f.done||[];let k=f.from;while(k<=mk(ty,tm)){if(!f.done.includes(k)){const[y,m]=k.split('-').map(Number),dt=ds(y,m-1,Math.min(f.day,dim(y,m)));if(dt<=t){S.tx.push({id:uid(),date:dt,type:'e',amt:f.amt,cat:f.cat,pay:f.pay,memo:'固定費:'+f.name,due:due(dt,f.pay)});f.done.push(k);ch=1}}k=nk(k,1)}});if(ch)save()}
+function go(t){v=t;$('main').innerHTML=({in:vIn,li:vLi,su:vSu,up:vUp,se:vSe})[t]();document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t))}
+const rd=()=>go(v);
+/* 入力 */
+function vIn(){const cs=F.type=='e'?S.ce:S.ci;if(!cs.includes(F.cat))F.cat=cs[0]||'';const pc=S.pay.find(x=>x.n===F.pay);if(pc&&pc.c&&!F.man)F.due=due(F.date,F.pay);
+return `<div style="flex:1"></div><div class=seg><button class="${F.type=='e'?'on':''}" onclick="F.type='e';rd()">支出</button><button class="${F.type=='i'?'on':''}" onclick="F.type='i';rd()">収入</button></div>
+<div class=chips>${cs.map(c=>`<button class="chip ${c==F.cat?'on':''}" data-c="${esc(c)}" onclick="F.cat=this.dataset.c;rd()">${esc(c)}</button>`).join('')}</div>
+<div class=g2><label>日付<input type=date value="${F.date}" onchange="F.date=this.value||today();rd()"></label>
+<label>支払い方法<select onchange="F.pay=this.value;F.man=0;rd()">${S.pay.map(p=>`<option ${p.n==F.pay?'selected':''}>${esc(p.n)}</option>`).join('')}</select></label></div>
+${pc&&pc.c?`<label>引き落とし日<input type=date value="${F.due}" onchange="F.due=this.value;F.man=1"></label>`:''}
+<input id=fm placeholder="メモ" value="${esc(F.memo)}" oninput="F.memo=this.value">
+<div class=amt><input inputmode=numeric placeholder="金額" value="${F.amt}" oninput="F.amt=this.value.replace(/\\D/g,'')"><button class=go onclick="sv()">${E?'更新':'記録'}</button></div>${E?'<button class=del onclick="dl()">この記録を削除</button>':''}`}
+function sv(){const a=parseInt(F.amt);if(!a)return toast('金額を入力してください');const pc=S.pay.find(x=>x.n===F.pay),t={id:E||uid(),date:F.date,type:F.type,amt:a,cat:F.cat,pay:F.pay,memo:F.memo,due:pc&&pc.c?F.due:F.date};
+if(E)S.tx=S.tx.map(x=>x.id===E?t:x);else S.tx.push(t);save();toast(E?'更新しました':'記録しました');E=null;F=nf();go('in')}
+function dl(){if(!confirm('削除しますか?'))return;S.tx=S.tx.filter(x=>x.id!==E);save();E=null;F=nf();toast('削除しました');go('li')}
+function ed(id){const t=S.tx.find(x=>x.id===id);E=id;F={type:t.type,cat:t.cat,pay:t.pay,date:t.date,amt:String(t.amt),memo:t.memo||'',due:t.due,man:1};go('in')}
+/* 一覧・集計 */
+const inP=k=>S.tx.filter(t=>t.date>=ps(k)&&t.date<=pend(k));
+const pnav=k=>`<div class=pn><button onclick="P=nk(P,-1);rd()">◀</button><div style="text-align:center">${plab(k)}<div class=s>${prange(k)}</div></div><button onclick="P=nk(P,1);rd()">▶</button></div>`;
+function vLi(){const a=inP(P).sort((x,y)=>y.date.localeCompare(x.date));return pnav(P)+(a.length?a.map(t=>`<div class=r onclick="ed('${t.id}')"><span>${esc(t.cat)}<br><span class=s>${t.date.slice(5).replace('-','/')} ${esc(t.pay)}${t.memo?' ・'+esc(t.memo):''}</span></span><span class="${t.type}">${t.type=='e'?'-':'+'}${yen(t.amt)}</span></div>`).join(''):'<p class=s>この期間の記録はありません。入力画面から記録できます。</p>')}
+function vSu(){const a=inP(P),sm=y=>a.filter(t=>t.type==y).reduce((s,t)=>s+t.amt,0),ei=sm('i'),ee=sm('e'),by={};a.filter(t=>t.type=='e').forEach(t=>by[t.cat]=(by[t.cat]||0)+t.amt);const rows=Object.entries(by).sort((x,y)=>y[1]-x[1]);
+return pnav(P)+`<div class=r><span>収入</span><span class="i big">${yen(ei)}</span></div><div class=r><span>支出</span><span class="e big">${yen(ee)}</span></div><div class=r><span>差額</span><span class=big>${ei-ee<0?'-':''}${yen(Math.abs(ei-ee))}</span></div><h3>支出の内訳</h3>`+(rows.length?rows.map(([c,n])=>`<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between"><span>${esc(c)}</span><span>${yen(n)} <span class=s>${Math.round(n/ee*100)}%</span></span></div><div class=bar style="width:${Math.max(2,n/rows[0][1]*100)}%"></div></div>`).join(''):'<p class=s>支出の記録はありません。</p>')}
+function vUp(){const t=today(),a=S.tx.filter(x=>x.type=='e'&&x.due>t),by={};a.forEach(x=>by[x.due]=(by[x.due]||0)+x.amt);const ks=Object.keys(by).sort();
+return `<h3>今後の引き落とし予定</h3>`+(ks.length?`<div class=r><span>合計</span><span class="e big">${yen(a.reduce((s,x)=>s+x.amt,0))}</span></div>`+ks.map(k=>`<div class=r><span>${k.slice(5).replace('-','/')}</span><span>${yen(by[k])}</span></div>`).join(''):'<p class=s>引き落とし予定はありません。</p>')}
+/* 設定 */
+const pick=(t,a)=>{const r=prompt(t+'\n'+a.map((x,i)=>(i+1)+': '+x).join('\n'));return a[(parseInt(r)||0)-1]};
+const num=(t,d)=>{const r=prompt(t,d);return r===null?null:parseInt(r)||0};
+const lst=k=>`<div class=chips>${S[k].map((c,i)=>`<button class=chip onclick="ec('${k}',${i})">${esc(c)}</button>`).join('')}<button class=chip onclick="ec('${k}',-1)">+追加</button></div>`;
+function vSe(){return `<h3>月の起点日</h3><div class=r><span>毎月 ${S.sd}日 から</span><button class=sm onclick="sd()">変更</button></div><div class=r><span>${plab(P)}だけ ${S.ov[P]||S.sd}日 から</span><button class=sm onclick="so()">変更</button></div>
+<h3>支出カテゴリ(タップで編集)</h3>${lst('ce')}<h3>収入カテゴリ</h3>${lst('ci')}
+<h3>支払い方法</h3>${S.pay.map((p,i)=>`<div class=r><span>${esc(p.n)}<br><span class=s>${p.c?`締め${p.c}日・${p.m}ヶ月後の${p.d}日に引き落とし`:'即時'}</span></span><button class=sm onclick="ep(${i})">編集</button></div>`).join('')}<button class=sm onclick="ep(-1)">+追加</button>
+<h3>固定費(毎月同額)</h3>${S.fx.map((f,i)=>`<div class=r><span>${esc(f.name)} ${yen(f.amt)}<br><span class=s>毎月${f.day}日・${esc(f.cat)}・${esc(f.pay)}</span></span><button class=sm onclick="df(${i})">削除</button></div>`).join('')}<button class=sm onclick="af()">+追加</button>
+<h3>データ</h3><button class=sm onclick="ex('j')">JSON書き出し</button><button class=sm onclick="ex('c')">CSV書き出し</button><label class=sm style="color:var(--tx);font-size:14px">JSONから復元<input type=file accept=".json,application/json" hidden onchange="im(this)"></label>`}
+function sd(){const n=num('毎月の起点日(1〜28)',S.sd);if(n>=1&&n<=28){S.sd=n;save();rd()}}
+function so(){const n=num(plab(P)+'の起点日(1〜28。0で元に戻す)',S.ov[P]||S.sd);if(n===null)return;if(n==0)delete S.ov[P];else if(n>=1&&n<=28)S.ov[P]=n;save();rd()}
+function ec(k,i){const old=i<0?'':S[k][i],r=prompt(i<0?'追加するカテゴリ名':'名前を変更(空欄で削除)',old);if(r===null)return;const n=r.trim();
+if(i<0){if(n)S[k].push(n)}else if(!n)S[k].splice(i,1);else{S[k][i]=n;S.tx.forEach(t=>{if(t.cat===old&&t.type==(k=='ce'?'e':'i'))t.cat=n});S.fx.forEach(f=>{if(k=='ce'&&f.cat===old)f.cat=n})}save();rd()}
+function ep(i){const o=i<0?{n:'',c:0,d:0,m:0}:S.pay[i],r=prompt(i<0?'支払い方法の名前':'名前(空欄で削除)',o.n);if(r===null)return;const n=r.trim();
+if(i>=0&&!n){S.pay.splice(i,1);save();return rd()}if(!n)return;const c=num('締め日(0=即時に引き落とし)',o.c);if(c===null)return;let d=0,m=0;if(c){d=num('引き落とし日',o.d||10);m=num('締め日の何ヶ月後?(1=翌月)',o.m||1);if(d===null||m===null)return}
+if(i>=0&&o.n!==n){S.tx.forEach(t=>{if(t.pay===o.n)t.pay=n});S.fx.forEach(f=>{if(f.pay===o.n)f.pay=n})}const p={n,c,d,m};if(i<0)S.pay.push(p);else S.pay[i]=p;save();rd()}
+function af(){const name=(prompt('固定費の名前(例:家賃)')||'').trim();if(!name)return;const amt=num('金額',''),day=num('毎月の支払日(1〜28)','1');if(!amt||!(day>=1&&day<=28))return toast('金額と支払日を確認してください');const cat=pick('カテゴリの番号',S.ce),pay=pick('支払い方法の番号',S.pay.map(p=>p.n));if(!cat||!pay)return toast('番号を選んでください');
+const[ty,tm]=parse(today());S.fx.push({name,amt,day,cat,pay,from:mk(ty,tm),done:[]});runFx();save();rd()}
+function df(i){if(confirm(S.fx[i].name+'を削除しますか?(記録済みの分は残ります)')){S.fx.splice(i,1);save();rd()}}
+async function ex(k){const q=s=>'"'+String(s).replace(/"/g,'""')+'"',txt=k=='j'?JSON.stringify(S):'日付,種別,カテゴリ,金額,支払い方法,引き落とし日,メモ\n'+[...S.tx].sort((a,b)=>a.date.localeCompare(b.date)).map(t=>[t.date,t.type=='e'?'支出':'収入',q(t.cat),t.amt,q(t.pay),t.due,q(t.memo||'')].join(',')).join('\n'),
+n='kakeibo-'+today()+(k=='j'?'.json':'.csv'),f=new File([(k=='c'?'\ufeff':'')+txt],n,{type:k=='j'?'application/json':'text/csv'});
+if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f]});return}catch(e){if(e.name=='AbortError')return}}
+const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=n;a.click()}
+function im(el){const f=el.files[0];if(!f)return;f.text().then(x=>{try{const o=JSON.parse(x);if(!Array.isArray(o.tx))throw 0;if(!confirm('現在のデータを、このファイルの内容に置き換えます。よろしいですか?'))return;S=Object.assign(clone(D),o);save();F=nf();toast('復元しました');rd()}catch(e){toast('読み込めないファイルです')}});el.value=''}
+/* 起動 */
+F=nf();runFx();P=per(today());go('in');
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){runFx();if(v!='in')rd()}});
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
